@@ -1,5 +1,6 @@
 #!/bin/sh
 
+  # Imprimir informações sobre os parâmetros do sistema.
   printParametros() {
     echo "PARAMETROS:";
     echo "1 - [URL] - Url monitorada. Ex: https://www.google.com";
@@ -11,57 +12,94 @@
   }
 
   # Preparar monitor para iniciar
-  echo "Preparando monitor...";
-  echo "200" > status.log;
-  echo "Monitor iniciado";
-  url=$1
-  intervalo=$2
-  token=$3
-  chat=$4
-  debug=$5
+  prepararInicio() {
+    echo "Preparando monitor...";
+    echo "200" > status.log;
+    echo "Monitor iniciado";
+  }
 
-  # Checar parametros obrigatorios
-  if [ -z "$url" ] || [ -z "$intervalo" ] || [ -z "$token" ] || [ -z "$chat" ]
-    then
-      echo "Erro: Parametro nao informado!";
-      printParametros;
-      exit 137;
-  fi
+  # Validar parâmetros do sistema
+  validarParametros() {
 
-  # Checa se o parametro [INTERVALO] e um numero
-  if [ ! -z ${intervalo##*[0-9]*} ]
-    then
-      echo "Erro: Informe um numero no parametro [INTERVALO] " >&2;
-      printParametros;
-      exit 137;
-  fi
+    _url=$1;
+    _intervalo=$2;
+    _token=$3;
+    _chat=$4;
+    _debug=$5;
 
-  # Loop checagem
-  while true
-    do
-      if [ "$debug" = true ]
-        then
-          echo "Request URL "$url; # Log debug
-      fi
-      status_code=$(curl -fsSL -o /dev/null -i -w "%{http_code}" $1); # Request [URL]
-      if [ "$debug" = true ]
-        then
-          echo "Status code "$status_code; # Log debug
-      fi
-      status_code_log=$(cat status.log); # Ultimo status_code
-      if [ "$status_code" != "$status_code_log" ] # Compara status_code atual e o ultimo para nao enviar mensagem repedida para o Telegram
-        then
-          echo "Status code alterado. Atual: "$status_code". Ultimo status: "$status_code_log;
-          echo $status_code > status.log; # Atualiza o ultimo status_code com o atual
-          if [ "$status_code" != "200" ] # Se status_code nao for 200, informa no Telegram
-            then
-              mensagem="[Alerta] Status Code "$status_code" na URL "$url; 
-              curl -X POST -H 'Content-Type: application/json' -d '{"chat_id": "'"$chat"'", "text": "'"$mensagem"'", "disable_notification": true}' https://api.telegram.org/bot$token/sendMessage
-            else # Status voltou ao normal - 200
-              mensagem="[OK] URL "$url" respondendo corretamente. Status code: "$status_code; 
-              curl -X POST -H 'Content-Type: application/json' -d '{"chat_id": "'"$chat"'", "text": "'"$mensagem"'", "disable_notification": true}' https://api.telegram.org/bot$token/sendMessage
-          fi
-      fi
+    # Checar parâmetros obrigatórios
+    if [ -z "$_url" ] || [ -z "$_intervalo" ] || [ -z "$_token" ] || [ -z "$_chat" ]
+      then
+        echo "Erro: Parametro nao informado!";
+        printParametros;
+        exit 137;
+    fi
 
-      sleep $intervalo; # Aguarda [INTERVALO] para a proxima checagem
-    done
+    # Checa se o parâmetro [INTERVALO] é um número
+    if [ ! -z ${_intervalo##*[0-9]*} ]
+      then
+        echo "Erro: Informe um numero no parametro [INTERVALO] " >&2;
+        printParametros;
+        exit 137;
+    fi
+  }
+
+  log() {
+
+    _mensagem=$1;
+    _debug=$2;
+
+    if [ "$_debug" = true ]
+      then
+        echo $_mensagem; # Log debug
+    fi
+  }
+
+  checarHTTP() {
+
+    _url=$1;
+    _token=$2;
+    _chat=$3;
+    _debug=$4;
+
+    log "Request URL "$_url $_debug;
+    status_code=$(curl -fsSL -o /dev/null -i -w "%{http_code}" $_url); # Request [URL]
+    log "Status code "$status_code $_debug;
+
+    status_code_log=$(cat status.log); # Último status_code
+    if [ "$status_code" != "$status_code_log" ] # Compara status_code atual e o último para não enviar mensagem repedida para o Telegram
+      then
+        echo "Status code alterado. Atual: "$status_code". Ultimo status: "$status_code_log;
+        echo $status_code > status.log; # Atualiza o último status_code com o atual
+        if [ "$status_code" != "200" ] # Se status_code não for 200, informa no Telegram
+          then
+            mensagem="[Alerta] Status Code "$status_code" na URL "$_url; 
+            curl -X POST -H 'Content-Type: application/json' -d '{"chat_id": "'"$_chat"'", "text": "'"$mensagem"'", "disable_notification": true}' https://api.telegram.org/bot$_token/sendMessage
+          else # Status voltou ao normal - 200
+            mensagem="[OK] URL "$_url" respondendo corretamente. Status code: "$status_code; 
+            curl -X POST -H 'Content-Type: application/json' -d '{"chat_id": "'"$_chat"'", "text": "'"$mensagem"'", "disable_notification": true}' https://api.telegram.org/bot$_token/sendMessage
+        fi
+    fi
+  }
+
+  run() {
+
+    # Atribuir parâmetros para variáveis
+    _url=$1;
+    _intervalo=$2;
+    _token=$3;
+    _chat=$4;
+    _debug=$5;
+
+    prepararInicio;
+    validarParametros $_url $_intervalo $_token $_chat $_debug;
+
+    # Loop checagem
+    while true
+      do
+        checarHTTP $_url $_token $_chat $_debug
+        sleep $_intervalo; # Aguarda [INTERVALO] para a próxima checagem
+      done    
+  }
+
+  run $1 $2 $3 $4 $5
